@@ -2,6 +2,8 @@
 
 Minimalist Windows timer manager. Global shortcut and simple-to-use functionality.
 
+![Cover Image](ScreenshotCover.png)
+
 ## Table of Contents
 
 * [Overview](#overview)
@@ -31,7 +33,7 @@ It runs entirely locally with no external services or dependencies beyond the .N
 * **Global Hotkey Access** — Open and close QuickTimers from anywhere on your system with a fully customizable hotkey *(default: Ctrl+Alt+/)*.
 * **Timer Groups** — Organize timers into collapsible groups. Drag timers onto group headers to assign them, double-click a group to rename it inline, and star groups to pin them to the top.
 * **Star & Prioritize** — Star individual timers to highlight them with a ❗ marker and sort them above the rest within their group.
-* **Toast Notifications** — When a timer fires, a toast notification appears with **Dismiss** and **Complete** actions. Hovering pauses the auto-dismiss countdown. If ignored, a follow-up notification fires after 5 minutes.
+* **Toast Notifications** — When a timer fires, a toast notification appears with **Dismiss** and **Complete** actions. Hovering pauses the auto-dismiss countdown. If ignored, a follow-up notification fires minutes.
 * **Scheduled Triggers** — Set a specific date and time for each timer. A live countdown label refreshes every 10 seconds so you always know what's coming up next.
 * **Multiple Color Themes** — Choose from 9 built-in themes including Dark, Light, Dracula, Gruvbox, and all four Catppuccin variants.
 * **Persistent Window Position** — QuickTimers remembers where you left it on screen between sessions.
