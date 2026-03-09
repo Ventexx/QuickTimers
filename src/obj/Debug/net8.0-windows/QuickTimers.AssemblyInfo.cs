@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("QuickTimers")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+71a639a9d9050b250f75744eb646e0b44dc83513")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+1fd48a61d92b8c682ba98b889b407b0bafe400dd")]
 [assembly: System.Reflection.AssemblyProductAttribute("QuickTimers")]
 [assembly: System.Reflection.AssemblyTitleAttribute("QuickTimers")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
