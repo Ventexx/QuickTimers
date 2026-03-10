@@ -31,9 +31,10 @@ It runs entirely locally with no external services or dependencies beyond the .N
 # Features
 
 * **Global Hotkey Access** — Open and close QuickTimers from anywhere on your system with a fully customizable hotkey *(default: Ctrl+Alt+/)*.
+* **Quick Timer Button** — Create a timer instantly from the main toolbar with the ⏱ button. Select any interval from 5 to 60 minutes and a timer is created immediately with no extra prompts. The timer can be renamed and managed like any other.
 * **Timer Groups** — Organize timers into collapsible groups. Drag timers onto group headers to assign them, double-click a group to rename it inline, and star groups to pin them to the top.
 * **Star & Prioritize** — Star individual timers to highlight them with a ❗ marker and sort them above the rest within their group.
-* **Toast Notifications** — When a timer fires, a toast notification appears with **Dismiss** and **Complete** actions. Hovering pauses the auto-dismiss countdown. If ignored, a follow-up notification fires minutes.
+* **Toast Notifications** — When a timer fires, a toast notification appears with **Dismiss** and **Complete** actions. Notifications persist on screen until you act on them. Multiple notifications stack from the bottom-right corner, pushing each other upward as they arrive. Clicking Dismiss schedules a follow-up notification for exactly 5 minutes later. Clicking Complete marks the timer as done with no further reminders.
 * **Scheduled Triggers** — Set a specific date and time for each timer. A live countdown label refreshes every 10 seconds so you always know what's coming up next.
 * **Multiple Color Themes** — Choose from 9 built-in themes including Dark, Light, Dracula, Gruvbox, and all four Catppuccin variants.
 * **Persistent Window Position** — QuickTimers remembers where you left it on screen between sessions.
@@ -122,6 +123,8 @@ Press the global hotkey to open QuickTimers. (Default: Ctrl+Alt+/)
 
 Click the + button or press Ctrl+N to add a new timer.
 
+Click the ⏱ button to instantly create a quick timer — select any 5-minute interval up to 60 minutes. The timer is created immediately and can be renamed or edited at any time.
+
 Set a trigger date and time when creating or editing a timer.
 
 Double-click any timer to edit it.
@@ -130,7 +133,7 @@ Right-click a timer for Rename, Set group, Star, or Delete.
 
 Right-click a group header for Star group or Rename group.
 
-When a timer fires, click **Complete** to mark it done or **Dismiss** to silence it. Hovering over the notification pauses its auto-dismiss timer.
+When a timer fires, click **Complete** to mark it done permanently, or **Dismiss** to silence it temporarily — the notification will reappear after exactly 5 minutes. Notifications stay visible until you act on them, and multiple notifications stack in the corner without overlapping.
 
 You can change the global hotkey and switch between color themes in the Settings menu.
 

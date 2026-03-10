@@ -23,12 +23,10 @@ namespace QuickTimers
 
     // NotifState is persisted inside TimerEntry so behaviour survives restarts.
     // None      → no notification sent yet
-    // Fired     → first notification shown (not yet acted on, app running)
-    // Ignored   → user let first notif auto-dismiss; second fires after 5 min
-    // Ignored2  → user let second notif auto-dismiss too; no more notifs ever
-    // Dismissed → user explicitly clicked Dismiss; no more notifs ever
-    // Done      → user completed via notification
-    public enum NotifState { None, Fired, Ignored, Ignored2, Dismissed, Done }
+    // Fired     → notification currently showing (or was showing before app restart)
+    // Dismissed → user clicked Dismiss; notification will re-fire after exactly 5 min
+    // Done      → user clicked Complete; no more notifications ever
+    public enum NotifState { None, Fired, Dismissed, Done }
 
     public class TimerEntry
     {
@@ -349,8 +347,8 @@ namespace QuickTimers
                 Child = new TextBlock { Text = "⏱", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
             };
             quickTimerButton.MouseLeftButtonUp += (_, _) => OpenQuickTimerDropdown();
-            quickTimerButton.GotFocus  += (_, _) => { var th = GetTheme(); quickTimerButton.BorderBrush = Br(th.AccentBorder); };
-            quickTimerButton.LostFocus += (_, _) => { var th = GetTheme(); quickTimerButton.BorderBrush = new SolidColorBrush(Color.FromArgb(80, ((SolidColorBrush)Br(th.Border)).Color.R, ((SolidColorBrush)Br(th.Border)).Color.G, ((SolidColorBrush)Br(th.Border)).Color.B)); };
+            quickTimerButton.GotFocus  += (_, _) => { var th = GetTheme(); var ac = (Color)ColorConverter.ConvertFromString(th.AccentColor); quickTimerButton.BorderBrush = new SolidColorBrush(ac); };
+            quickTimerButton.LostFocus += (_, _) => { var th = GetTheme(); var ac = (Color)ColorConverter.ConvertFromString(th.AccentColor); quickTimerButton.BorderBrush = new SolidColorBrush(Color.FromArgb(210, ac.R, ac.G, ac.B)); };
             quickTimerButton.MouseEnter += (_, _) => quickTimerButton.Opacity = 0.80;
             quickTimerButton.MouseLeave += (_, _) => quickTimerButton.Opacity = 1.0;
 
@@ -409,10 +407,10 @@ namespace QuickTimers
             if (quickTimerButton != null)
             {
                 var fg  = (Color)ColorConverter.ConvertFromString(theme.Foreground);
-                var brd = (Color)ColorConverter.ConvertFromString(theme.Border);
+                var ac  = (Color)ColorConverter.ConvertFromString(theme.AccentColor);
                 // Slightly tinted background: foreground at very low opacity over the normal bg
                 quickTimerButton.Background   = new SolidColorBrush(Color.FromArgb(22, fg.R, fg.G, fg.B));
-                quickTimerButton.BorderBrush  = new SolidColorBrush(Color.FromArgb(80, brd.R, brd.G, brd.B));
+                quickTimerButton.BorderBrush  = new SolidColorBrush(Color.FromArgb(210, ac.R, ac.G, ac.B));
                 // Tint the child text to match foreground
                 if (quickTimerButton.Child is TextBlock qtb)
                     qtb.Foreground = new SolidColorBrush(Color.FromArgb(200, fg.R, fg.G, fg.B));
@@ -899,58 +897,48 @@ namespace QuickTimers
             foreach (var entry in timers.ToList())
             {
                 if (entry.TriggerAt == DateTime.MinValue) continue;
-                if (_pendingDismiss.ContainsKey(entry))  continue;
-                if (entry.TriggerAt > now)               continue;
+                if (_pendingDismiss.ContainsKey(entry))   continue;
+                if (entry.TriggerAt > now)                continue;
 
                 // States that mean "never show again"
-                var s = entry.NotifState;
-                if (s == NotifState.Dismissed || s == NotifState.Done ||
-                    s == NotifState.Ignored2)             continue;
+                if (entry.NotifState == NotifState.Done) continue;
 
-                // Already showing a window for this entry
-                if (_activeNotifs.Contains(entry))        continue;
+                // Already showing a notification window for this entry
+                if (_activeNotifs.Contains(entry)) continue;
 
-                bool isReminder = (s == NotifState.Ignored);
-
-                if (s == NotifState.None || s == NotifState.Fired)
-                {
-                    // First notification
-                    entry.NotifState = NotifState.Fired;
-                    SaveTimers();
-                    _activeNotifs.Add(entry);
-                    TriggerToast(entry, isReminder: false);
-                }
-                else if (s == NotifState.Ignored)
-                {
-                    // Second (reminder) notification — scheduled via DispatcherTimer in TriggerToast,
-                    // but if the app was restarted while in Ignored state we also catch it here.
-                    _activeNotifs.Add(entry);
-                    TriggerToast(entry, isReminder: true);
-                }
+                // Fire (or re-fire) a notification
+                entry.NotifState = NotifState.Fired;
+                SaveTimers();
+                _activeNotifs.Add(entry);
+                TriggerToast(entry);
             }
         }
 
-        void TriggerToast(TimerEntry entry, bool isReminder)
+        void TriggerToast(TimerEntry entry)
         {
             var theme = GetTheme();
-            var toast = new ToastNotificationWindow(theme, entry, isReminder);
+            var toast = new ToastNotificationWindow(theme, entry);
 
-            // Position: stack above any existing toasts
+            const double margin    = 12;
             double baseBottom = SystemParameters.WorkArea.Bottom;
             double baseRight  = SystemParameters.WorkArea.Right;
-            const double margin = 12;
-            double yOffset = margin;
-            foreach (var existing in _toastStack)
-                yOffset += existing.ActualHeight > 0 ? existing.ActualHeight + 6 : 90;
 
+            // Push all existing toasts upward to make room for the new one
+            // We don't know the new toast's height yet, so use a standard slot height
+            const double slotHeight = 96;
+            foreach (var existing in _toastStack)
+                existing.AnimateShift(-(slotHeight + 6));
+
+            // Start off-screen at bottom
             toast.Left = baseRight - toast.Width - margin;
             toast.Top  = baseBottom + 60;
             toast.Show();
 
+            // After layout, slide up to first slot
             Dispatcher.BeginInvoke(() =>
             {
                 toast.Left = baseRight - toast.Width - margin;
-                double finalTop = baseBottom - yOffset - toast.ActualHeight;
+                double finalTop = baseBottom - margin - toast.ActualHeight;
                 toast.AnimateIn(finalTop);
             }, System.Windows.Threading.DispatcherPriority.Loaded);
 
@@ -962,50 +950,51 @@ namespace QuickTimers
                 entry.NotifState = NotifState.Done;
                 SaveTimers();
                 _activeNotifs.Remove(entry);
-                _toastStack.Remove(toast);
+                RemoveToastFromStack(toast);
                 Dispatcher.BeginInvoke(() => CompleteEntryFromNotification(entry));
             };
 
-            // ── User explicitly dismissed ────────────────────────────────
+            // ── User explicitly dismissed — re-fire after exactly 5 minutes ─
             toast.OnDismiss += () =>
             {
                 entry.NotifState = NotifState.Dismissed;
                 SaveTimers();
                 _activeNotifs.Remove(entry);
-                _toastStack.Remove(toast);
-            };
+                RemoveToastFromStack(toast);
 
-            // ── Auto-ignored (timed out without interaction) ─────────────
-            toast.OnIgnored += () =>
-            {
-                _activeNotifs.Remove(entry);
-                _toastStack.Remove(toast);
-
-                if (!isReminder)
+                var reTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
+                reTimer.Tick += (_, _) =>
                 {
-                    // First ignore → schedule reminder in 5 min
-                    entry.NotifState = NotifState.Ignored;
-                    SaveTimers();
-                    var reTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
-                    reTimer.Tick += (_, _) =>
+                    reTimer.Stop();
+                    if (timers.Contains(entry) && !_pendingDismiss.ContainsKey(entry) &&
+                        entry.NotifState == NotifState.Dismissed && !_activeNotifs.Contains(entry))
                     {
-                        reTimer.Stop();
-                        if (timers.Contains(entry) && !_pendingDismiss.ContainsKey(entry) &&
-                            entry.NotifState == NotifState.Ignored && !_activeNotifs.Contains(entry))
-                        {
-                            _activeNotifs.Add(entry);
-                            TriggerToast(entry, isReminder: true);
-                        }
-                    };
-                    reTimer.Start();
-                }
-                else
-                {
-                    // Second ignore → mark permanently silent
-                    entry.NotifState = NotifState.Ignored2;
-                    SaveTimers();
-                }
+                        entry.NotifState = NotifState.Fired;
+                        SaveTimers();
+                        _activeNotifs.Add(entry);
+                        TriggerToast(entry);
+                    }
+                };
+                reTimer.Start();
             };
+        }
+
+        void RemoveToastFromStack(ToastNotificationWindow toast)
+        {
+            int idx = _toastStack.IndexOf(toast);
+            if (idx < 0) return;
+            _toastStack.RemoveAt(idx);
+
+            // Recalculate correct positions for remaining toasts from bottom up
+            const double margin     = 12;
+            const double slotHeight = 96;
+            double baseBottom = SystemParameters.WorkArea.Bottom;
+
+            for (int i = 0; i < _toastStack.Count; i++)
+            {
+                double targetTop = baseBottom - margin - (i + 1) * (slotHeight + 6) + 6;
+                _toastStack[i].AnimateTo(targetTop);
+            }
         }
 
         void CompleteEntryFromNotification(TimerEntry entry)
@@ -2038,23 +2027,16 @@ namespace QuickTimers
     {
         public event Action? OnComplete;
         public event Action? OnDismiss;   // user explicitly clicked Dismiss
-        public event Action? OnIgnored;   // auto-dismissed after 10s with no interaction
 
         const double ToastWidth = 300;
 
-        DispatcherTimer _autoTimer;
         bool _dismissed = false;
-
-        // Hover-pause state for the 10s auto-dismiss
-        double _elapsedMs   = 0;       // ms consumed before any pause
-        bool   _timerPaused = false;
-        System.Diagnostics.Stopwatch _timerSw = new();
 
         // ── Glow overlay – easy to remove: delete the field + the 4 lines in BuildContent
         //    that reference _glowOverlay, and the MouseEnter/MouseLeave on clipGrid.
         Border _glowOverlay = null!;
 
-        public ToastNotificationWindow(ThemeColors theme, TimerEntry entry, bool isReminder)
+        public ToastNotificationWindow(ThemeColors theme, TimerEntry entry)
         {
             Width               = ToastWidth;
             SizeToContent       = SizeToContent.Height;
@@ -2066,28 +2048,10 @@ namespace QuickTimers
             ShowInTaskbar       = false;
             WindowStartupLocation = WindowStartupLocation.Manual;
 
-            Content = BuildContent(theme, entry, isReminder);
-
-            // Tick every 200ms; checks remaining budget against elapsed stopwatch time
-            _autoTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
-            _autoTimer.Tick += (_, _) =>
-            {
-                if (_dismissed || _timerPaused) return;
-                if (_elapsedMs + _timerSw.ElapsedMilliseconds >= 10_000)
-                {
-                    _autoTimer.Stop();
-                    if (!_dismissed) AnimateOut(reason: DismissReason.Ignored);
-                }
-            };
-
-            Loaded += (_, _) =>
-            {
-                _timerSw.Restart();
-                _autoTimer.Start();
-            };
+            Content = BuildContent(theme, entry);
         }
 
-        enum DismissReason { Complete, Dismiss, Ignored }
+        enum DismissReason { Complete, Dismiss }
 
         public void AnimateIn(double finalTop)
         {
@@ -2107,11 +2071,53 @@ namespace QuickTimers
             moveTimer.Start();
         }
 
+        // Shift the toast up (negative deltaY) or down (positive) — used when new toasts arrive
+        public void AnimateShift(double deltaY)
+        {
+            double start  = Top;
+            double target = Top + deltaY;
+            double dur    = 200;
+            var sw        = System.Diagnostics.Stopwatch.StartNew();
+
+            var moveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(8) };
+            moveTimer.Tick += (_, _) =>
+            {
+                double t     = Math.Min(sw.ElapsedMilliseconds / dur, 1.0);
+                double eased = 1 - Math.Pow(1 - t, 3);
+                Top = start + (target - start) * eased;
+                if (t >= 1.0) { moveTimer.Stop(); Top = target; }
+            };
+            moveTimer.Start();
+        }
+
+        // Animate to an absolute target position — used when stack is rebalanced after removal
+        public void AnimateTo(double targetTop)
+        {
+            double start = Top;
+            double dur   = 200;
+            var sw       = System.Diagnostics.Stopwatch.StartNew();
+
+            var moveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(8) };
+            moveTimer.Tick += (_, _) =>
+            {
+                double t     = Math.Min(sw.ElapsedMilliseconds / dur, 1.0);
+                double eased = 1 - Math.Pow(1 - t, 3);
+                Top = start + (targetTop - start) * eased;
+                if (t >= 1.0) { moveTimer.Stop(); Top = targetTop; }
+            };
+            moveTimer.Start();
+        }
+
         void AnimateOut(DismissReason reason)
         {
             if (_dismissed) return;
             _dismissed = true;
-            _autoTimer.Stop();
+
+            // Immediately make non-interactive so clicks fall through to toasts below
+            IsHitTestVisible = false;
+
+            // Slide behind others by temporarily lowering z-order
+            Topmost = false;
 
             double start  = Top;
             double target = SystemParameters.WorkArea.Bottom + 20;
@@ -2128,25 +2134,21 @@ namespace QuickTimers
                 {
                     moveTimer.Stop();
                     Close();
-                    if      (reason == DismissReason.Complete) OnComplete?.Invoke();
-                    else if (reason == DismissReason.Dismiss)  OnDismiss?.Invoke();
-                    else                                        OnIgnored?.Invoke();
+                    if (reason == DismissReason.Complete) OnComplete?.Invoke();
+                    else                                   OnDismiss?.Invoke();
                 }
             };
             moveTimer.Start();
         }
 
-        FrameworkElement BuildContent(ThemeColors theme, TimerEntry entry, bool isReminder)
+        FrameworkElement BuildContent(ThemeColors theme, TimerEntry entry)
         {
             var bg          = (Color)ColorConverter.ConvertFromString(theme.Background);
             var border      = (Color)ColorConverter.ConvertFromString(theme.Border);
             var fg          = (Color)ColorConverter.ConvertFromString(theme.Foreground);
-            var accentBorder = (Color)ColorConverter.ConvertFromString(theme.AccentBorder); // dimmer accent for glow
+            var accentBorder = (Color)ColorConverter.ConvertFromString(theme.AccentBorder);
 
-            // Reminder pass → subtle red border tint
-            var borderColor = isReminder
-                ? Color.FromRgb(170, 55, 55)
-                : border;
+            var borderColor = border;
 
             // Outer wrapper — transparent padding for drop-shadow room
             var outer = new Border { Background = Brushes.Transparent, Padding = new Thickness(3) };
@@ -2249,21 +2251,14 @@ namespace QuickTimers
             clipGrid.Children.Add(mainBrd);
             clipGrid.Children.Add(_glowOverlay);
 
-            // Hover: fade glow in/out + pause/resume the 10s auto-dismiss timer
+            // Hover: fade glow in/out
             double glowDur = 180;
             clipGrid.MouseEnter += (_, _) =>
             {
-                // Pause: bank elapsed time, stop stopwatch
-                _elapsedMs  += _timerSw.ElapsedMilliseconds;
-                _timerSw.Reset();
-                _timerPaused = true;
                 AnimateGlow(from: _glowOverlay.Opacity, to: 1.0, durationMs: glowDur);
             };
             clipGrid.MouseLeave += (_, _) =>
             {
-                // Resume: restart stopwatch from current banked position
-                _timerPaused = false;
-                _timerSw.Restart();
                 AnimateGlow(from: _glowOverlay.Opacity, to: 0.0, durationMs: glowDur);
             };
             // ...to here (and also remove the _glowOverlay field declaration above)
