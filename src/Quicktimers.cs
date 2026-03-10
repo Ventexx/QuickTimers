@@ -115,9 +115,10 @@ namespace QuickTimers
 
         Border     mainBorder     = null!;
         StackPanel contentPanel   = null!;
-        Border     addButton      = null!;
-        Border     settingsButton = null!;
-        Border     statusBar      = null!;
+        Border     addButton        = null!;
+        Border     settingsButton   = null!;
+        Border     quickTimerButton = null!;
+        Border     statusBar        = null!;
         Dictionary<TimerEntry, Border> timerToBorder = new();
 
         bool childWindowOpen = false;
@@ -333,6 +334,30 @@ namespace QuickTimers
             Grid.SetColumn(leftPanel, 0);
             statusGrid.Children.Add(leftPanel);
 
+            // Right panel: Quick Timer dropdown button
+            var rightPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 2, 0) };
+
+            quickTimerButton = new Border
+            {
+                Width           = 28,
+                Height          = 28,
+                CornerRadius    = new CornerRadius(6),
+                BorderThickness = new Thickness(2),
+                Cursor          = Cursors.Hand,
+                Focusable       = true,
+                FocusVisualStyle = null,
+                Child = new TextBlock { Text = "⏱", FontSize = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+            };
+            quickTimerButton.MouseLeftButtonUp += (_, _) => OpenQuickTimerDropdown();
+            quickTimerButton.GotFocus  += (_, _) => { var th = GetTheme(); quickTimerButton.BorderBrush = Br(th.AccentBorder); };
+            quickTimerButton.LostFocus += (_, _) => { var th = GetTheme(); quickTimerButton.BorderBrush = new SolidColorBrush(Color.FromArgb(80, ((SolidColorBrush)Br(th.Border)).Color.R, ((SolidColorBrush)Br(th.Border)).Color.G, ((SolidColorBrush)Br(th.Border)).Color.B)); };
+            quickTimerButton.MouseEnter += (_, _) => quickTimerButton.Opacity = 0.80;
+            quickTimerButton.MouseLeave += (_, _) => quickTimerButton.Opacity = 1.0;
+
+            rightPanel.Children.Add(quickTimerButton);
+            Grid.SetColumn(rightPanel, 2);
+            statusGrid.Children.Add(rightPanel);
+
             statusBar.Child = statusGrid;
             dock.Children.Add(statusBar);
 
@@ -381,6 +406,20 @@ namespace QuickTimers
             }
             if (statusBar != null)
                 statusBar.BorderBrush = Br(theme.Border);
+            if (quickTimerButton != null)
+            {
+                var fg  = (Color)ColorConverter.ConvertFromString(theme.Foreground);
+                var brd = (Color)ColorConverter.ConvertFromString(theme.Border);
+                // Slightly tinted background: foreground at very low opacity over the normal bg
+                quickTimerButton.Background   = new SolidColorBrush(Color.FromArgb(22, fg.R, fg.G, fg.B));
+                quickTimerButton.BorderBrush  = new SolidColorBrush(Color.FromArgb(80, brd.R, brd.G, brd.B));
+                // Tint the child text to match foreground
+                if (quickTimerButton.Child is TextBlock qtb)
+                    qtb.Foreground = new SolidColorBrush(Color.FromArgb(200, fg.R, fg.G, fg.B));
+                if (quickTimerButton.Child is StackPanel sp)
+                    foreach (var c in sp.Children)
+                        if (c is TextBlock tb) tb.Foreground = new SolidColorBrush(Color.FromArgb(200, fg.R, fg.G, fg.B));
+            }
         }
 
         static Brush Br(string hex) => (Brush)new BrushConverter().ConvertFromString(hex)!;
@@ -1342,6 +1381,112 @@ namespace QuickTimers
             win.Owner  = this;
             win.Closed += (_, _) => { childWindowOpen = false; ApplyTheme(); BuildTimerList(); };
             win.ShowDialog();
+        }
+
+        // ---------------------------------------------------------------
+        // Quick Timer dropdown
+        // ---------------------------------------------------------------
+        void OpenQuickTimerDropdown()
+        {
+            var theme = GetTheme();
+            var bg    = (Color)ColorConverter.ConvertFromString(theme.Background);
+            var fg    = (Color)ColorConverter.ConvertFromString(theme.Foreground);
+            var brd   = (Color)ColorConverter.ConvertFromString(theme.Border);
+            var hl    = (Color)ColorConverter.ConvertFromString(theme.HighlightBg);
+            var ac    = (Color)ColorConverter.ConvertFromString(theme.AccentColor);
+
+            var popup = new Popup
+            {
+                Placement         = PlacementMode.Bottom,
+                PlacementTarget   = quickTimerButton,
+                StaysOpen         = false,
+                AllowsTransparency = true,
+                PopupAnimation    = PopupAnimation.Fade,
+            };
+
+            // Outer shadow/border wrapper
+            var outerBorder = new Border
+            {
+                Background      = new SolidColorBrush(Color.FromArgb(252, bg.R, bg.G, bg.B)),
+                BorderBrush     = new SolidColorBrush(Color.FromArgb(160, brd.R, brd.G, brd.B)),
+                BorderThickness = new Thickness(1.5),
+                CornerRadius    = new CornerRadius(7),
+                Padding         = new Thickness(0, 4, 0, 4),
+                MinWidth        = 140,
+                Effect          = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color     = Colors.Black,
+                    Opacity   = 0.28,
+                    BlurRadius = 14,
+                    ShadowDepth = 3
+                }
+            };
+
+            // List — no scrollbar needed, all 12 options fit
+            var scroll = new ScrollViewer
+            {
+                VerticalScrollBarVisibility   = ScrollBarVisibility.Disabled,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            };
+
+            var itemsPanel = new StackPanel();
+
+            for (int minutes = 5; minutes <= 60; minutes += 5)
+            {
+                int capturedMinutes = minutes;
+                string label = capturedMinutes == 60
+                    ? "60 min  (1 hour)"
+                    : $"{capturedMinutes} min";
+
+                var item = new Border
+                {
+                    Padding         = new Thickness(14, 6, 14, 6),
+                    Background      = Brushes.Transparent,
+                    Cursor          = Cursors.Hand,
+                };
+
+                var itemText = new TextBlock
+                {
+                    Text       = label,
+                    Foreground = new SolidColorBrush(fg),
+                    FontSize   = 12,
+                };
+                item.Child = itemText;
+
+                item.MouseEnter += (_, _) =>
+                {
+                    item.Background = new SolidColorBrush(Color.FromArgb(90, hl.R, hl.G, hl.B));
+                    itemText.Foreground = new SolidColorBrush(ac);
+                };
+                item.MouseLeave += (_, _) =>
+                {
+                    item.Background = Brushes.Transparent;
+                    itemText.Foreground = new SolidColorBrush(fg);
+                };
+
+                item.MouseLeftButtonUp += (_, _) =>
+                {
+                    popup.IsOpen = false;
+                    var triggerAt = DateTime.Now.AddMinutes(capturedMinutes);
+                    var name      = $"Quicktimer in {capturedMinutes} Minutes";
+                    var entry = new TimerEntry
+                    {
+                        Text      = name,
+                        TriggerAt = triggerAt,
+                        Order     = timers.Count
+                    };
+                    timers.Add(entry);
+                    SaveTimers();
+                    BuildTimerList();
+                };
+
+                itemsPanel.Children.Add(item);
+            }
+
+            scroll.Content    = itemsPanel;
+            outerBorder.Child = scroll;
+            popup.Child       = outerBorder;
+            popup.IsOpen      = true;
         }
 
         // ---------------------------------------------------------------
